@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>2D Jewelry AR – Earrings + Necklace</title>
+
+    <!-- MediaPipe FaceMesh -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background: #000;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Full Screen Video - Using 'cover' to maintain aspect ratio and prevent distortion */
+        video {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scaleX(-1);
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        /* AR Overlay Elements */
+        .jewel {
+            position: absolute;
+            pointer-events: none;
+            z-index: 10;
+            transform-origin: 50% 0%;
+            /* Aligned with logic update */
+            display: none;
+        }
+
+        /* Controls Container */
+        .controls {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            width: 90%;
+            max-width: 520px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 18px;
+            padding: 14px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: opacity 0.3s ease, transform 0.2s ease;
+        }
+
+        .controls.hidden {
+            display: none !important;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+        }
+
+        /* Settings toggle button */
+        #settingsToggle {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 25;
+            border: none;
+            background: rgba(255, 255, 255, 0.9);
+            color: #000;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        }
+
+        #settingsToggle:active {
+            transform: scale(0.97);
+        }
+
+        .controls .close-btn {
+            align-self: flex-end;
+            border: none;
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        /* Buttons */
+        button {
+            border: none;
+            background: rgba(255, 255, 255, 0.9);
+            color: #000;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 12px 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+            white-space: nowrap;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        button:active {
+            transform: scale(0.96);
+            background: #fff;
+        }
+
+        button#start {
+            background: linear-gradient(135deg, #6C63FF, #4A40E5);
+            color: white;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 16px 32px;
+            font-size: 18px;
+            border-radius: 50px;
+            z-index: 30;
+            box-shadow: 0 4px 15px rgba(108, 99, 255, 0.4);
+            flex: none;
+            width: auto;
+        }
+
+        button#start.active {
+            display: none;
+        }
+
+        button#uploadNecklaceBtn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        /* Slider */
+        label {
+            color: white;
+            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            width: 100%;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .controls {
+                top: 12px;
+                padding: 12px;
+                gap: 10px;
+                border-radius: 16px;
+            }
+
+            button {
+                font-size: 13px;
+                padding: 10px 16px;
+            }
+
+            button#start {
+                font-size: 16px;
+                padding: 14px 28px;
+            }
+
+            label {
+                font-size: 12px;
+            }
+
+            input[type="range"] {
+                height: 5px;
+            }
+
+            input[type="range"]::-webkit-slider-thumb {
+                width: 18px;
+                height: 18px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .controls {
+                top: 8px;
+                padding: 10px;
+                gap: 8px;
+                width: 94%;
+            }
+
+            button {
+                font-size: 12px;
+                padding: 9px 14px;
+            }
+
+            button#start {
+                font-size: 15px;
+                padding: 12px 24px;
+            }
+
+            .control-row {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .control-row:first-child {
+                flex-direction: row;
+            }
+        }
+
+        /* Handle landscape orientation on mobile */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .controls {
+                top: 6px;
+                padding: 8px;
+                gap: 6px;
+            }
+
+            button {
+                font-size: 11px;
+                padding: 8px 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <button id="start">📸 Enable Camera</button>
+    <button id="settingsToggle" style="display:none;">⚙️ Show Options</button>
+
+    <div class="controls" id="ui-controls" style="display:none;">
+        <button class="close-btn" id="controlsClose">✕ Close</button>
+        <div class="control-row">
+            <button id="toggleNecklace">👁️ Show/Hide</button>
+            <button id="uploadNecklaceBtn">📤 Upload Photo</button>
+        </div>
+        <div class="control-row">
+            <label>
+                Necklace Height Adjustment
+                <input type="range" id="neckHeight" min="-100" max="100" value="100">
+            </label>
+        </div>
+        <div class="control-row">
+            <label style="flex:1; color:white; display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="removeBgToggle" checked>
+                Remove background on upload (downloads result)
+            </label>
+        </div>
+    </div>
+
+    <!-- Hidden native inputs -->
+    <input type="file" id="uploadNecklaceInput" accept="image/*" style="display: none;">
+
+    <video id="video" autoplay muted playsinline></video>
+
+    <!-- Earrings -->
+    <img id="earLeft" class="jewel" src="assets/ear-ring-2.png">
+    <img id="earRight" class="jewel" src="assets/ear-ring-2.png">
+
+    <!-- Necklace -->
+    <img id="necklace" class="jewel" src="assets/rm.png">
+
+    <script>
+        /* =====================================================
+           BASIC SETUP
+        ===================================================== */
+
+        const video = document.getElementById("video");
+        const btnStart = document.getElementById("start");
+        const btnNecklace = document.getElementById("toggleNecklace");
+        const btnUpload = document.getElementById("uploadNecklaceBtn");
+        const inputUpload = document.getElementById("uploadNecklaceInput");
+        const sliderHeight = document.getElementById("neckHeight");
+        const settingsToggle = document.getElementById("settingsToggle");
+        const controlsClose = document.getElementById("controlsClose");
+        const removeBgToggle = document.getElementById("removeBgToggle");
+
+        const earL = document.getElementById("earLeft");
+        const earR = document.getElementById("earRight");
+        const necklaceEl = document.getElementById("necklace");
+
+        let showNecklace = false;
+
+        let faceMesh, videoRect;
+        let videoDisplayInfo = { width: 0, height: 0, offsetX: 0, offsetY: 0 };
+        const ML_INTERVAL = 100;
+        let lastML = 0;
+
+        const SMOOTH = 0.25;
+
+        const smooth = {
+            earL: { x: 0, y: 0 },
+            earR: { x: 0, y: 0 },
+            neck: { x: 0, y: 0 }
+        };
+
+        /* =====================================================
+           CAMERA
+        ===================================================== */
+
+        // Function to update videoRect and calculate actual displayed video area
+        function updateVideoRect() {
+            videoRect = video.getBoundingClientRect();
+            
+            // Calculate actual displayed video dimensions with object-fit: cover
+            if (video.videoWidth && video.videoHeight) {
+                const containerAspect = videoRect.width / videoRect.height;
+                const videoAspect = video.videoWidth / video.videoHeight;
+                
+                if (videoAspect > containerAspect) {
+                    // Video is wider - height is the limiting factor
+                    videoDisplayInfo.height = videoRect.height;
+                    videoDisplayInfo.width = videoRect.height * videoAspect;
+                    videoDisplayInfo.offsetX = (videoRect.width - videoDisplayInfo.width) / 2;
+                    videoDisplayInfo.offsetY = 0;
+                } else {
+                    // Video is taller - width is the limiting factor
+                    videoDisplayInfo.width = videoRect.width;
+                    videoDisplayInfo.height = videoRect.width / videoAspect;
+                    videoDisplayInfo.offsetX = 0;
+                    videoDisplayInfo.offsetY = (videoRect.height - videoDisplayInfo.height) / 2;
+                }
+            } else {
+                // Fallback if video dimensions not available yet
+                videoDisplayInfo.width = videoRect.width;
+                videoDisplayInfo.height = videoRect.height;
+                videoDisplayInfo.offsetX = 0;
+                videoDisplayInfo.offsetY = 0;
+            }
+        }
+
+        // Handle window resize and orientation change
+        let resizeTimeout;
+        function handleResize() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if (video.videoWidth && video.videoHeight) {
+                    updateVideoRect();
+                }
+            }, 100);
+        }
+        
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(handleResize, 200); // Delay for orientation change to complete
+        });
+
+        function showControls() {
+            document.getElementById('ui-controls').style.display = 'flex';
+            settingsToggle.textContent = '✕ Hide Options';
+        }
+
+        function hideControls() {
+            document.getElementById('ui-controls').style.display = 'none';
+            settingsToggle.textContent = '⚙️ Show Options';
+        }
+
+        settingsToggle.onclick = () => {
+            const isVisible = document.getElementById('ui-controls').style.display === 'flex';
+            if (isVisible) hideControls(); else showControls();
+        };
+
+        controlsClose.onclick = () => hideControls();
+
+        btnStart.onclick = async () => {
+            btnStart.disabled = true;
+            btnStart.classList.add('active'); // Hide start button
+            settingsToggle.style.display = 'block';
+
+            // Request camera with ideal constraints for better aspect ratio handling
+            const constraints = {
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: 'user'
+                }
+            };
+
+            video.srcObject = await navigator.mediaDevices.getUserMedia(constraints);
+            video.onloadedmetadata = () => {
+                // Video dimensions are now available
+                updateVideoRect();
+            };
+            video.onloadeddata = () => {
+                video.play();
+                updateVideoRect(); // Ensure it's updated after play
+                initFaceMesh();
+                requestAnimationFrame(loop);
+            };
+        };
+
+        /* =====================================================
+           TOGGLE NECKLACE
+        ===================================================== */
+
+        btnNecklace.onclick = () => {
+            showNecklace = !showNecklace;
+            necklaceEl.style.display = showNecklace ? "block" : "none";
+        };
+
+        /* =====================================================
+           UPLOAD NECKLACE
+        ===================================================== */
+
+        // Helper function to set necklace image and show it
+        function setNecklaceImage(imageUrl) {
+            necklaceEl.src = imageUrl;
+            if (!showNecklace) {
+                showNecklace = true;
+                necklaceEl.style.display = "block";
+            }
+        }
+
+        // Helper function to download image
+        function downloadImage(blob, filename = 'necklace-no-bg.png') {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        btnUpload.onclick = () => {
+            inputUpload.click();
+        };
+
+        inputUpload.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const apiKey = '9fbSbQuJMi9a4GyPkvpXsdQK'; // API Key from removed-bg implementation
+
+            // If remove-bg toggle is OFF, just use the uploaded image directly
+            if (!removeBgToggle.checked) {
+                const reader = new FileReader();
+                reader.onload = (evt) => setNecklaceImage(evt.target.result);
+                reader.readAsDataURL(file);
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image_file', file);
+            formData.append('size', 'auto');
+
+            try {
+                const response = await fetch('https://api.remove.bg/v1.0/removebg', {
+                    method: 'POST',
+                    headers: { 'X-Api-Key': apiKey },
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('Failed to remove background');
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+
+                // Set the removed-bg image as the necklace source
+                setNecklaceImage(url);
+
+                // Download the image with removed background
+                downloadImage(blob, `necklace-no-bg-${Date.now()}.png`);
+
+            } catch (error) {
+                console.error('Background removal failed:', error);
+                // Fallback: If API fails, directly use the uploaded image
+                const reader = new FileReader();
+                reader.onload = (evt) => setNecklaceImage(evt.target.result);
+                reader.readAsDataURL(file);
+            }
+        };
+
+        /* =====================================================
+           MEDIAPIPE
+        ===================================================== */
+
+        function initFaceMesh() {
+            faceMesh = new FaceMesh({
+                locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+            });
+
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            faceMesh.onResults(onFace);
+        }
+
+        async function loop(ts) {
+            if (ts - lastML > ML_INTERVAL) {
+                lastML = ts;
+                await faceMesh.send({ image: video });
+            }
+            requestAnimationFrame(loop);
+        }
+
+        /* =====================================================
+           UTILS
+        ===================================================== */
+
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+        function toScreen(p) {
+            // Map MediaPipe normalized coordinates (0-1) to actual displayed video area
+            // Account for object-fit: cover and any cropping
+            const x = (1 - p.x) * videoDisplayInfo.width + videoRect.left + videoDisplayInfo.offsetX;
+            const y = p.y * videoDisplayInfo.height + videoRect.top + videoDisplayInfo.offsetY;
+            
+            return {
+                x: x,
+                y: y,
+                z: p.z
+            };
+        }
+
+        /* =====================================================
+           EARRING LOGIC (ISOLATED)
+        ===================================================== */
+
+        function updateEarrings(lm, size) {
+            // ============================================
+            // EARRING POSITION OFFSETS - ADJUST HERE
+            // ============================================
+            // Adjust these values to fine-tune earring positions:
+            const OFFSET_HORIZONTAL = 0.20;         // Outward from head (0.1-0.35)
+            const OFFSET_VERTICAL = 0.16;           // Base down from lobe (lower = higher)
+            const OFFSET_VERTICAL_EXTRA = -0.10;    // Additional scaled shift; negative lifts up
+            const OFFSET_X_PIXELS_LEFT = 5;         // Extra X for left ear (+ moves right on screen)
+            const OFFSET_X_PIXELS_RIGHT = 0;        // Extra X for right ear (+ moves left on screen)
+            const OFFSET_Y_PIXELS = 0;              // Additional Y offset in pixels (-20 to +20)
+            // ============================================
+
+            // Landmarks:
+            // 234 (L tragion), 454 (R tragion)
+            // 132 (L earlobe / lower ear), 361 (R earlobe / lower ear)
+            const L_lobe = toScreen(lm[132]);
+            const R_lobe = toScreen(lm[361]);
+
+            // Fallback direction using tragion/back to keep facing correction
+            const L_root = toScreen(lm[234]);
+            const L_back = toScreen(lm[93]);
+            const R_root = toScreen(lm[454]);
+            const R_back = toScreen(lm[323]);
+
+            function anchor(lobe, root, back, isLeft) {
+                // Direction from root to back to know ear facing
+                const dx = back.x - root.x;
+                const dy = back.y - root.y;
+                const len = Math.hypot(dx, dy) || 1;
+                const nx = dx / len;
+                const ny = dy / len;
+
+                // Position at lobe, then offset outward and downward
+                return {
+                    x: lobe.x
+                       + (isLeft ? 1 : -1) * (size * OFFSET_HORIZONTAL)
+                       + (isLeft ? OFFSET_X_PIXELS_LEFT : -OFFSET_X_PIXELS_RIGHT)
+                       + nx * size * 0.05,
+                    y: lobe.y
+                       + size * (OFFSET_VERTICAL + OFFSET_VERTICAL_EXTRA)
+                       + OFFSET_Y_PIXELS
+                       + ny * size * 0.05,
+                    z: lobe.z
+                };
+            }
+
+            const L = anchor(L_lobe, L_root, L_back, true);
+            const R = anchor(R_lobe, R_root, R_back, false);
+
+            smooth.earL.x = lerp(smooth.earL.x || L.x, L.x, SMOOTH);
+            smooth.earL.y = lerp(smooth.earL.y || L.y, L.y, SMOOTH);
+            smooth.earR.x = lerp(smooth.earR.x || R.x, R.x, SMOOTH);
+            smooth.earR.y = lerp(smooth.earR.y || R.y, R.y, SMOOTH);
+
+            const Z_THRESHOLD = 0.015;
+            const showLeft = (R.z - L.z) > -Z_THRESHOLD;
+            const showRight = (L.z - R.z) > -Z_THRESHOLD;
+
+            if (showLeft) render(earL, smooth.earL.x, smooth.earL.y, size);
+            else earL.style.display = "none";
+
+            if (showRight) render(earR, smooth.earR.x, smooth.earR.y, size);
+            else earR.style.display = "none";
+        }
+
+        /* =====================================================
+           NECKLACE LOGIC (ISOLATED)
+        ===================================================== */
+
+        function updateNecklace(lm, size) {
+            if (!showNecklace) return;
+
+            const jawL = toScreen(lm[172]);
+            const jawR = toScreen(lm[397]);
+
+            const nose = toScreen(lm[1]);
+            const chin = toScreen(lm[152]);
+
+
+            const faceHeightPx = Math.hypot(
+                nose.x - chin.x,
+                nose.y - chin.y
+            );
+
+
+            const heightOffset = parseInt(sliderHeight.value, 10);
+            console.log("heightOffset -> ", heightOffset / 2);
+            const necklaceSize = clamp(
+                faceHeightPx * heightOffset / 2, // tune: 0.9 → 1.3
+                // faceHeightPx * 4.3, // tune: 0.9 → 1.3
+                90,                 // min size
+                280                 // max size
+            );
+
+            // Get offset from slider (range -100 to 100 pixels, adjustable)
+
+
+            const centerX = (jawL.x + jawR.x) / 2;
+            const centerY = (jawL.y + jawR.y) / 2 + size * 0.6;
+
+            smooth.neck.x = lerp(smooth.neck.x || centerX, centerX, SMOOTH);
+            smooth.neck.y = lerp(smooth.neck.y || centerY, centerY, SMOOTH);
+
+            render(necklaceEl, smooth.neck.x, smooth.neck.y + 2 * (heightOffset / 5), necklaceSize);
+        }
+
+        /* =====================================================
+           FACE CALLBACK
+        ===================================================== */
+
+        function onFace(res) {
+            if (!res.multiFaceLandmarks?.length) {
+                earL.style.display = earR.style.display = necklaceEl.style.display = "none";
+                return;
+            }
+
+            // Ensure video display info is calculated
+            if (video.videoWidth && video.videoHeight && videoDisplayInfo.width === 0) {
+                updateVideoRect();
+            }
+
+            const lm = res.multiFaceLandmarks[0];
+            const noseZ = lm[1].z;
+            const size = clamp((-noseZ) * 180 + 16, 18, 46);
+
+            updateEarrings(lm, size);
+            updateNecklace(lm, size * 2);
+        }
+
+        /* =====================================================
+           RENDER
+        ===================================================== */
+
+        function render(el, x, y, size) {
+            el.style.display = "block";
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.height = `${size}px`;
+            el.style.transform = "translate(-50%, 0)";
+
+            //new one 
+            el.style.transformOrigin = "50% 0%";
+            el.style.transform = "translate(-50%, 0)";
+        }
+    </script>
+
+</body>
+
+</html>
