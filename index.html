@@ -7,6 +7,8 @@
 
     <!-- MediaPipe FaceMesh -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -291,8 +293,22 @@
         </div>
         <div class="control-row">
             <label style="flex:1; color:white; display:flex; align-items:center; gap:8px;">
-                <input type="checkbox" id="removeBgToggle" checked>
+                <input type="checkbox" id="removeBgToggle" >
                 Remove background on upload (downloads result)
+            </label>
+        </div>
+        <div class="control-row">
+            <label style="flex:1; color:white; display:flex; align-items:center; gap:8px;">
+                <input type="radio" name="jewelryType" id="jewelryTypeHand" value="hand" checked>
+                Hand Bracelet
+            </label>
+            <label style="flex:1; color:white; display:flex; align-items:center; gap:8px;">
+                <input type="radio" name="jewelryType" id="jewelryTypeNeck" value="neck">
+                Necklace
+            </label>
+            <label style="flex:1; color:white; display:flex; align-items:center; gap:8px;">
+                <input type="radio" name="jewelryType" id="jewelryTypeFinger" value="finger">
+                Finger Ring
             </label>
         </div>
     </div>
@@ -308,6 +324,12 @@
 
     <!-- Necklace -->
     <img id="necklace" class="jewel" src="assets/rm.png">
+
+    <!-- Hand Bracelet -->
+    <img id="bracelet" class="jewel" src="assets/bracelight.png">
+
+    <!-- Finger Ring -->
+    <img id="fingerRing" class="jewel" src="assets/bracelight.png">
 
     <script>
         /* =====================================================
@@ -327,10 +349,14 @@
         const earL = document.getElementById("earLeft");
         const earR = document.getElementById("earRight");
         const necklaceEl = document.getElementById("necklace");
+        const braceletEl = document.getElementById("bracelet");
+        const fingerRingEl = document.getElementById("fingerRing");
 
         let showNecklace = false;
+        let showBracelet = false;
+        let showFingerRing = false;
 
-        let faceMesh, videoRect;
+        let faceMesh, hands, videoRect;
         let videoDisplayInfo = { width: 0, height: 0, offsetX: 0, offsetY: 0 };
         const ML_INTERVAL = 100;
         let lastML = 0;
@@ -340,8 +366,15 @@
         const smooth = {
             earL: { x: 0, y: 0 },
             earR: { x: 0, y: 0 },
-            neck: { x: 0, y: 0 }
+            neck: { x: 0, y: 0 },
+            bracelet: { x: 0, y: 0, angle: 0 },
+            fingerRing: { x: 0, y: 0, angle: 0 }
         };
+
+        // Jewelry type selection
+        const jewelryTypeHand = document.getElementById("jewelryTypeHand");
+        const jewelryTypeNeck = document.getElementById("jewelryTypeNeck");
+        const jewelryTypeFinger = document.getElementById("jewelryTypeFinger");
 
         /* =====================================================
            CAMERA
@@ -434,6 +467,7 @@
                 video.play();
                 updateVideoRect(); // Ensure it's updated after play
                 initFaceMesh();
+                initHands();
                 requestAnimationFrame(loop);
             };
         };
@@ -460,6 +494,25 @@
             }
         }
 
+        // Helper function to set bracelet image and show it
+        function setBraceletImage(imageUrl) {
+            braceletEl.src = imageUrl;
+            if (!showBracelet) {
+                showBracelet = true;
+                braceletEl.style.display = "block";
+                braceletEl.style.transform = "rotate(90deg)";
+            }
+        }
+
+        // Helper function to set finger ring image and show it
+        function setFingerRingImage(imageUrl) {
+            fingerRingEl.src = imageUrl;
+            if (!showFingerRing) {
+                showFingerRing = true;
+                fingerRingEl.style.display = "block";
+            }
+        }
+
         // Helper function to download image
         function downloadImage(blob, filename = 'necklace-no-bg.png') {
             const url = URL.createObjectURL(blob);
@@ -480,12 +533,31 @@
             const file = e.target.files[0];
             if (!file) return;
 
+            // Get selected jewelry type
+            let selectedType = 'hand';
+            if (jewelryTypeHand.checked) selectedType = 'hand';
+            else if (jewelryTypeNeck.checked) selectedType = 'neck';
+            else if (jewelryTypeFinger.checked) selectedType = 'finger';
+
+            // Handle finger type
+            if (selectedType === 'finger') {
+                // Finger ring will be handled below in the upload logic
+            }
+
             const apiKey = '9fbSbQuJMi9a4GyPkvpXsdQK'; // API Key from removed-bg implementation
 
             // If remove-bg toggle is OFF, just use the uploaded image directly
             if (!removeBgToggle.checked) {
                 const reader = new FileReader();
-                reader.onload = (evt) => setNecklaceImage(evt.target.result);
+                reader.onload = (evt) => {
+                    if (selectedType === 'neck') {
+                        setNecklaceImage(evt.target.result);
+                    } else if (selectedType === 'hand') {
+                        setBraceletImage(evt.target.result);
+                    } else if (selectedType === 'finger') {
+                        setFingerRingImage(evt.target.result);
+                    }
+                };
                 reader.readAsDataURL(file);
                 return;
             }
@@ -506,17 +578,31 @@
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
 
-                // Set the removed-bg image as the necklace source
-                setNecklaceImage(url);
-
-                // Download the image with removed background
-                downloadImage(blob, `necklace-no-bg-${Date.now()}.png`);
+                // Set the removed-bg image based on selected type
+                if (selectedType === 'neck') {
+                    setNecklaceImage(url);
+                    downloadImage(blob, `necklace-no-bg-${Date.now()}.png`);
+                } else if (selectedType === 'hand') {
+                    setBraceletImage(url);
+                    downloadImage(blob, `bracelet-no-bg-${Date.now()}.png`);
+                } else if (selectedType === 'finger') {
+                    setFingerRingImage(url);
+                    downloadImage(blob, `finger-ring-no-bg-${Date.now()}.png`);
+                }
 
             } catch (error) {
                 console.error('Background removal failed:', error);
                 // Fallback: If API fails, directly use the uploaded image
                 const reader = new FileReader();
-                reader.onload = (evt) => setNecklaceImage(evt.target.result);
+                reader.onload = (evt) => {
+                    if (selectedType === 'neck') {
+                        setNecklaceImage(evt.target.result);
+                    } else if (selectedType === 'hand') {
+                        setBraceletImage(evt.target.result);
+                    } else if (selectedType === 'finger') {
+                        setFingerRingImage(evt.target.result);
+                    }
+                };
                 reader.readAsDataURL(file);
             }
         };
@@ -540,10 +626,26 @@
             faceMesh.onResults(onFace);
         }
 
+        function initHands() {
+            hands = new Hands({
+                locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults(onHands);
+        }
+
         async function loop(ts) {
             if (ts - lastML > ML_INTERVAL) {
                 lastML = ts;
                 await faceMesh.send({ image: video });
+                await hands.send({ image: video });
             }
             requestAnimationFrame(loop);
         }
@@ -565,6 +667,19 @@
                 x: x,
                 y: y,
                 z: p.z
+            };
+        }
+
+        function toScreenHand(p) {
+            // For hands, MediaPipe coordinates are already in 0-1 range
+            // Map to actual displayed video area
+            const x = (1 - p.x) * videoDisplayInfo.width + videoRect.left + videoDisplayInfo.offsetX;
+            const y = p.y * videoDisplayInfo.height + videoRect.top + videoDisplayInfo.offsetY;
+            
+            return {
+                x: x,
+                y: y,
+                z: p.z || 0
             };
         }
 
@@ -680,6 +795,109 @@
         }
 
         /* =====================================================
+           HAND BRACELET LOGIC (ISOLATED)
+        ===================================================== */
+
+        function updateBracelet(landmarks) {
+            if (!showBracelet) return;
+
+            // MediaPipe Hands landmarks:
+            // 0: Wrist
+            // 4: Thumb tip
+            // 8: Index finger tip
+            // 12: Middle finger tip
+            // 16: Ring finger tip
+            // 20: Pinky tip
+            // 9: Index finger MCP (knuckle)
+            // 13: Middle finger MCP
+            // 17: Ring finger MCP
+            // 5: Thumb MCP
+
+            const wrist = toScreenHand(landmarks[0]);
+            const indexMCP = toScreenHand(landmarks[9]);
+            const middleMCP = toScreenHand(landmarks[13]);
+            const ringMCP = toScreenHand(landmarks[17]);
+
+            // Calculate wrist width (distance between index and ring finger MCPs)
+            const wristWidth = Math.hypot(
+                ringMCP.x - indexMCP.x,
+                ringMCP.y - indexMCP.y
+            );
+
+            // Calculate angle for bracelet rotation
+            // Use hand direction (wrist to middle finger) to get forward direction of hand
+            const handDx = middleMCP.x - wrist.x;
+            const handDy = middleMCP.y - wrist.y;
+            // Calculate hand angle
+            const handAngle = Math.atan2(handDy, handDx) * (180 / Math.PI);
+            // Add 90 degrees to make bracelet perpendicular (opposite/wrapped around) to hand direction
+            const angle = handAngle + 90;
+
+            // Position bracelet at wrist, slightly offset upward
+            const braceletX = wrist.x;
+            const braceletY = wrist.y - wristWidth * 0.1;
+
+            // Size based on wrist width
+            const braceletSize = clamp(wristWidth * 1.2, 60, 200);
+
+            smooth.bracelet.x = lerp(smooth.bracelet.x || braceletX, braceletX, SMOOTH);
+            smooth.bracelet.y = lerp(smooth.bracelet.y || braceletY, braceletY, SMOOTH);
+            smooth.bracelet.angle = lerp(smooth.bracelet.angle || angle, angle, SMOOTH);
+
+            renderBracelet(braceletEl, smooth.bracelet.x, smooth.bracelet.y, braceletSize, smooth.bracelet.angle);
+        }
+
+        /* =====================================================
+           FINGER RING LOGIC (ISOLATED)
+        ===================================================== */
+
+        function updateFingerRing(landmarks) {
+            if (!showFingerRing) return;
+
+            // MediaPipe Hands landmarks (21 landmarks per hand):
+            // 0: Wrist
+            // 1-4: Thumb (1=CMC, 2=MCP, 3=IP, 4=tip)
+            // 5-8: Index finger (5=MCP, 6=PIP, 7=DIP, 8=tip)
+            // 9-12: Middle finger (9=MCP, 10=PIP, 11=DIP, 12=tip)
+            // 13-16: Ring finger (13=MCP, 14=PIP, 15=DIP, 16=tip) - FOURTH FINGER
+            // 17-20: Pinky (17=MCP, 18=PIP, 19=DIP, 20=tip) - FIFTH FINGER
+
+            // Use ring finger (fourth finger) for ring placement
+            const ringFingerTip = toScreenHand(landmarks[16]);      // Ring finger tip
+            const ringFingerDIP = toScreenHand(landmarks[15]);      // Ring finger DIP (near tip)
+            const ringFingerPIP = toScreenHand(landmarks[14]);      // Ring finger PIP (middle joint)
+            const ringFingerMCP = toScreenHand(landmarks[13]);      // Ring finger MCP (base joint)
+
+            // Calculate finger direction from MCP to PIP for proper alignment
+            const fingerDx = ringFingerPIP.x - ringFingerMCP.x;
+            const fingerDy = ringFingerPIP.y - ringFingerMCP.y;
+            // Calculate finger angle
+            const fingerAngle = Math.atan2(fingerDy, fingerDx) * (180 / Math.PI);
+            // Add 90 degrees to make ring perpendicular (wrapped around) to finger
+            const angle = fingerAngle + 90;
+
+            // Position ring at the base of the finger, closer to MCP (where rings are typically worn)
+            // Use a point between MCP and PIP, but closer to MCP (about 30% from MCP)
+            const ringX = ringFingerMCP.x + (ringFingerPIP.x - ringFingerMCP.x) * 0.3;
+            const ringY = ringFingerMCP.y + (ringFingerPIP.y - ringFingerMCP.y) * 0.3;
+
+            // Calculate finger width for ring size (distance between PIP and MCP)
+            const fingerWidth = Math.hypot(
+                ringFingerPIP.x - ringFingerMCP.x,
+                ringFingerPIP.y - ringFingerMCP.y
+            );
+
+            // Size based on finger width - adjust multiplier for better fit
+            const ringSize = clamp(fingerWidth * 0.6, 12, 40);
+
+            smooth.fingerRing.x = lerp(smooth.fingerRing.x || ringX, ringX, SMOOTH);
+            smooth.fingerRing.y = lerp(smooth.fingerRing.y || ringY, ringY, SMOOTH);
+            smooth.fingerRing.angle = lerp(smooth.fingerRing.angle || angle, angle, SMOOTH);
+
+            renderFingerRing(fingerRingEl, smooth.fingerRing.x, smooth.fingerRing.y, ringSize, smooth.fingerRing.angle);
+        }
+
+        /* =====================================================
            FACE CALLBACK
         ===================================================== */
 
@@ -703,6 +921,28 @@
         }
 
         /* =====================================================
+           HANDS CALLBACK
+        ===================================================== */
+
+        function onHands(res) {
+            if (!res.multiHandLandmarks?.length) {
+                braceletEl.style.display = "none";
+                fingerRingEl.style.display = "none";
+                return;
+            }
+
+            // Ensure video display info is calculated
+            if (video.videoWidth && video.videoHeight && videoDisplayInfo.width === 0) {
+                updateVideoRect();
+            }
+
+            // Use the first detected hand
+            const handLandmarks = res.multiHandLandmarks[0];
+            updateBracelet(handLandmarks);
+            updateFingerRing(handLandmarks);
+        }
+
+        /* =====================================================
            RENDER
         ===================================================== */
 
@@ -716,6 +956,26 @@
             //new one 
             el.style.transformOrigin = "50% 0%";
             el.style.transform = "translate(-50%, 0)";
+        }
+
+        function renderBracelet(el, x, y, size, angle) {
+            el.style.display = "block";
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.width = `${size}px`;
+            el.style.height = "auto";
+            el.style.transformOrigin = "50% 50%";
+            el.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+        }
+
+        function renderFingerRing(el, x, y, size, angle) {
+            el.style.display = "block";
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.width = `${size}px`;
+            el.style.height = "auto";
+            el.style.transformOrigin = "50% 50%";
+            el.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
         }
     </script>
 
