@@ -358,8 +358,11 @@
 
         let faceMesh, hands, videoRect;
         let videoDisplayInfo = { width: 0, height: 0, offsetX: 0, offsetY: 0 };
-        const ML_INTERVAL = 100;
-        let lastML = 0;
+        const FACE_ML_INTERVAL = 200;  // Process face every 200ms
+        const HAND_ML_INTERVAL = 200;  // Process hands every 200ms
+        let lastFaceML = 0;
+        let lastHandML = 0;
+        let frameCounter = 0;  // For alternating processing
 
         const SMOOTH = 0.25;
 
@@ -618,7 +621,7 @@
 
             faceMesh.setOptions({
                 maxNumFaces: 1,
-                refineLandmarks: true,
+                refineLandmarks: false,  // Disabled for better performance (reduces CPU usage)
                 minDetectionConfidence: 0.5,
                 minTrackingConfidence: 0.5
             });
@@ -632,8 +635,8 @@
             });
 
             hands.setOptions({
-                maxNumHands: 2,
-                modelComplexity: 1,
+                maxNumHands: 1,  // Reduced from 2 to 1 for better performance
+                modelComplexity: 0,  // Reduced from 1 to 0 (lightest model) for better performance
                 minDetectionConfidence: 0.5,
                 minTrackingConfidence: 0.5
             });
@@ -642,11 +645,28 @@
         }
 
         async function loop(ts) {
-            if (ts - lastML > ML_INTERVAL) {
-                lastML = ts;
+            // Only process face detection if earrings or necklace are visible
+            const needsFaceDetection = true; // Always needed for earrings
+            
+            // Only process hands if bracelet or finger ring are visible
+            const needsHandDetection = showBracelet || showFingerRing;
+            
+            // Process face detection with separate interval
+            if (needsFaceDetection && ts - lastFaceML > FACE_ML_INTERVAL) {
+                lastFaceML = ts;
                 await faceMesh.send({ image: video });
-                await hands.send({ image: video });
             }
+            
+            // Process hand detection with separate interval (only if needed)
+            if (needsHandDetection && ts - lastHandML > HAND_ML_INTERVAL) {
+                lastHandML = ts;
+                await hands.send({ image: video });
+            } else if (!needsHandDetection) {
+                // Hide hand-related elements when not needed
+                braceletEl.style.display = "none";
+                fingerRingEl.style.display = "none";
+            }
+            
             requestAnimationFrame(loop);
         }
 
